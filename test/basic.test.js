@@ -7,40 +7,39 @@ var ejsify = require("../index")
   , assert = require("assert")
   , jsdom = require("jsdom-compat")
 
-function injectStript(cb) {
-  return function (bundleJs) {
-    jsdom.env({
-      html: "<!doctype html>",
-      src: [bundleJs],
-      loaded: function (err, window) {
-        assert.equal(err, null, "jsdom.env failed");
-        cb(null, window)
-      }
-    })
-  }
+function bundleAndLoad(entryFile, cb) {
+  browserify({basedir: path.join(__dirname, "fixtures")})
+    .transform(ejsify)
+    .require(entryFile, {expose: "myApp"})
+    .bundle()
+    .pipe(concatStream(function (bundleJs) {
+      jsdom.env({
+        html: "<!doctype html>",
+        src: [bundleJs],
+        loaded: function (err, window) {
+          assert.equal(err, null, "jsdom.env failed");
+          cb(null, window)
+        }
+      })
+    }))
 }
 
 describe("ejsify", function () {
 
   it("should process ejs files", function (done) {
 
-    browserify({basedir: path.join(__dirname, "fixtures")})
-      .transform(ejsify)
-      .require("./entry.js", {expose: "myApp"})
-      .bundle()
-      .pipe(concatStream(injectStript(function (err, window) {
+    bundleAndLoad("./trivial/entry", function (err, window) {
 
-        assert.equal(err, null, "injection failed")
-        assert(window.require, "require() was not created")
+      assert.equal(err, null, "injection failed")
 
-        var execBundle = window.require("myApp")
-        execBundle()
+      var runApp = window.require("myApp")
+      runApp()
 
-        assert.equal(window.document.body.innerHTML, "Ohai, Test &lt;b&gt;escaped&lt;/b&gt;")
+      assert.equal(window.document.body.innerHTML, "Ohai, Test &lt;b&gt;escaped&lt;/b&gt;")
 
-        done()
+      done()
 
-      })))
+    });
 
   })
 
